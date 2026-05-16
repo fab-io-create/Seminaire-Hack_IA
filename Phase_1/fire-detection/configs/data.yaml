@@ -1,0 +1,12 @@
+path: /Users/youss/Desktop/D-fire
+
+train: train
+val: test
+test: test
+
+names:
+  0: fire
+  1: smoke
+
+
+  
