@@ -1,2 +1,2 @@
-# S-minaire-Hack_IA
+# Seminaire-Hack_IA
 repo séminaire
