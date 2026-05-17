@@ -73,8 +73,7 @@ while True:
             name = "Unknown"
 
             if True in matches:
-                first_match_index = matches.index(True)
-                name = known_face_names[first_match_index]
+                name = known_face_names[matches.index(True)]
 
             face_names.append(name)
 
