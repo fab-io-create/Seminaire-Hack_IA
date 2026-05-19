@@ -1,97 +1,94 @@
 from Yoda import FaceRecognition
 import cv2
 import numpy as np
-import skimage.io as skio
+import os
 
 def load_rgb(path):
-    img = cv2.imread('/Users/youss/Desktop/face/Face-Recognition-master/' + path)
+    img = cv2.imread(os.path.join('./Personnes/', path))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
-video_capture = cv2.VideoCapture(0)
-
+# --- Chargement des personnes ---
 model = FaceRecognition()
-obama_image = load_rgb('Personnes/obama.jpg')
-obama_face_encoding = model.face_embeddings(obama_image)[0]
+known_face_encodings = []
+known_face_names = []
+PERSONS_DIR = './Personnes/'
+valid_extensions = ('.jpg', '.jpeg', '.png')
 
-me_image = load_rgb('Personnes/me.jpg')
-me_face_encoding = model.face_embeddings(me_image)[0]
+for filename in sorted(os.listdir(PERSONS_DIR)):
+    if filename.lower().endswith(valid_extensions):
+        image = load_rgb(filename)
+        encodings = model.face_embeddings(image)
+        if encodings:
+            known_face_encodings.append(encodings[0])
+            name = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').title()
+            known_face_names.append(name)
+        else:
+            print(f"Aucun visage détecté dans {filename}, fichier ignoré.")
 
-anthony_image = load_rgb('Personnes/anthony.jpg')
-anthony_face_encoding = model.face_embeddings(anthony_image)[0]
+print(f"✅ {len(known_face_names)} personne(s) chargée(s) : {known_face_names}")
 
-ilario_image = load_rgb('Personnes/ilario.jpg')
-ilario_face_encoding = model.face_embeddings(ilario_image)[0]
+# --- Capture vidéo ---
+CAM_W, CAM_H = 1280, 960
+video_capture = cv2.VideoCapture(0, cv2.CAP_V4L2)
+video_capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
+video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
+video_capture.set(cv2.CAP_PROP_FPS, 30)
+video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+actual_w = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+actual_h = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+print(f"Résolution effective : {actual_w}×{actual_h}")
 
-quentin_image = load_rgb('Personnes/quentin.jpg')
-quentin_face_encoding = model.face_embeddings(quentin_image)[0]
+# Tout est calculé dynamiquement depuis la résolution réelle
+DETECTION_SCALE = 0.25
+SMALL_W = int(actual_w * DETECTION_SCALE)
+SMALL_H = int(actual_h * DETECTION_SCALE)
+BOX_SCALE = int(1 / DETECTION_SCALE)  # = 4 si DETECTION_SCALE=0.25, s'adapte automatiquement
 
-fabio_image = load_rgb('Personnes/fabio.jpg')
-fabio_face_encoding = model.face_embeddings(fabio_image)[0]
-
-aurelie_image = load_rgb('Personnes/aurelie.jpg')
-aurelie_face_encoding = model.face_embeddings(aurelie_image)[0]
-
-
-known_face_encodings = [
-    obama_face_encoding,
-    me_face_encoding,
-    quentin_face_encoding,
-    ilario_face_encoding,
-    anthony_face_encoding,
-    fabio_face_encoding,
-    aurelie_face_encoding
-]
-known_face_names = [
-    "Barack Obama",
-    "Youssef Sardou",
-    "Quentin Aperol",
-    "Ilario Stracciatella",
-    "Anthony Mallicieux",
-    "Fabio Claudio",
-    "Coach"
-]
-
+font = cv2.FONT_HERSHEY_DUPLEX
 face_locations = []
-face_encodings = []
 face_names = []
-process_this_frame = True
+frame_count = 0
+PROCESS_EVERY_N = 5
 
 while True:
     ret, frame = video_capture.read()
+    if not ret:
+        break
 
-    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-    rgb_small_frame = small_frame[:, :, ::-1]
+    frame_count += 1
 
-    if process_this_frame:
-        face_locations = model.find_face_locations(rgb_small_frame)
-        face_encodings = model.face_embeddings(rgb_small_frame, face_locations)
+    if frame_count % PROCESS_EVERY_N == 0:
+        small = cv2.resize(frame, (SMALL_W, SMALL_H), interpolation=cv2.INTER_NEAREST)
+        rgb_small = small[:, :, ::-1]
 
-        face_names = []
-        for face_encoding in face_encodings:
-            matches = model.compare_faces(known_face_encodings, face_encoding)
-            name = "Unknown"
+        new_locations = model.find_face_locations(rgb_small)
 
-            if True in matches:
-                name = known_face_names[matches.index(True)]
-
-            face_names.append(name)
-
-    process_this_frame = not process_this_frame
+        if new_locations:
+            encodings = model.face_embeddings(rgb_small, new_locations)
+            new_names = []
+            for enc in encodings:
+                matches = model.compare_faces(known_face_encodings, enc)
+                new_names.append(known_face_names[matches.index(True)] if True in matches else "Unknown")
+            face_locations = new_locations
+            face_names = new_names
+        else:
+            face_locations = []
+            face_names = []
 
     for d, name in zip(face_locations, face_names):
-        top = d.top() * 4
-        right = d.right() * 4
-        bottom = d.bottom() * 4
-        left = d.left() * 4
+        top = d.top() * BOX_SCALE
+        right = d.right() * BOX_SCALE
+        bottom = d.bottom() * BOX_SCALE
+        left = d.left() * BOX_SCALE
+        color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
 
-        cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
-        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-        font = cv2.FONT_HERSHEY_DUPLEX
+        cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
         cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
     cv2.imshow('Video', frame)
-
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 

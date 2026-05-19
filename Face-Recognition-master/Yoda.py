@@ -41,8 +41,8 @@ class FaceRecognition:
         return [self.pose_estimator(img, d) for k, d in enumerate(face_locations)]
             
     def face_embeddings(self, image, face_locations=None, num_itters=0):
-        landmarks = self.find_face_landmarks(image, face_locations)
-        return [np.array(self.face_encoder.compute_face_descriptor(np.ascontiguousarray(image), land_mark)) for land_mark in landmarks]
+        landmarks = self.find_face_landmarks(image, face_locations)
+        return [np.array(self.face_encoder.compute_face_descriptor(np.ascontiguousarray(image), land_mark)) for land_mark in landmarks]
 
     def compute_eucledian_distance(self, face_descriptor1, face_descriptor2):
         """
